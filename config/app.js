@@ -6,6 +6,7 @@ const inquirer = require('inquirer');
 
 
 const mysql = require('mysql');
+const promisemysql = require("promise-mysql");
 
 const connection = mysql.createConnection({
     host: 'localhost',
@@ -16,31 +17,38 @@ const connection = mysql.createConnection({
 });
 
 
-
 connection.connect((err) => {
     if(err) throw err;
-    console.log(`connected as id ${connection.threadID}\n` );
 
-connection.query("SELECT * FROM employee_role", (err, res) => {
-    if (err) throw err;
+    employeeTracker();
+});
 
-    displayRoles = res.map(role => ({name: role.title, value: role.id}))
-})
-connection.query("SELECT * FROM employee", (err, res) => {
-    if (err) throw err;
 
-    displayEmployees = res.map(employee => ({first_name: employee.first_name, last_name: employee.last_name, value: employee.id}))
-})
-connection.query("SELECT * FROM department", (err, res) => {
-    if (err) throw err;
-
-    displayDepartments = res.map(department => ({name: department.dept_name, value: department.id}))
-})
-
-})
-
+//had to instantiate each variable outside of the employee tracker function
+let displayDepartments;
+let displayEmployees;
+let displayRoles;
 
 const employeeTracker = () => {
+
+    connection.query("SELECT * FROM employee_role", (err, res) => {
+        if (err) throw err;
+    
+        displayRoles = res.map(employee_role => ({name: employee_role.title, value: employee_role.id}))
+    })
+    connection.query("SELECT * FROM employee", (err, res) => {
+        if (err) throw err;
+    
+        displayEmployees = res.map(employee => ({full_name: `${employee.first_name} ${employee.last_name}`, value: `${employee.first_name} ${employee.last_name}`}))
+    })
+    connection.query("SELECT * FROM department", (err, res) => {
+        if (err) throw err;
+    
+        displayDepartments = res.map(department => ({name: department.dept_name, value: department.id}))
+    })
+    
+
+
     inquirer
         .prompt({
             name: 'action',
@@ -115,6 +123,65 @@ const menu = (option) => {
     }
 }
 
+const addDept = () => {
+    inquirer
+        .prompt([{
+            type: "input",
+            message: "New department name: ",
+            name: "name"
+        }])
+        .then((response) => {
+            console.log(response.name);
+            addDepartment(response.name);
+        })
+}
+
+const addDepartment = (data) => {
+    connection.query("INSERT INTO department SET ?", {
+            dept_name: data
+        },
+        (error, res) => {
+            if (error) throw error;
+        });
+    employeeTracker();
+}
+
+const addRole = () => {
+    inquirer
+        .prompt([{
+                type: "input",
+                message: "New role name: ",
+                name: "title"
+            },
+            {
+                type: "input",
+                message: "Role salary: ",
+                name: "salary"
+            },
+            {
+                type: "list",
+                message: "Department: ",
+                name: "id",
+                choices: displayDepartments
+            }
+        ])
+        .then((response) => {
+            console.log(response);
+            addEmployeeRole(response);
+        })
+}
+
+const addEmployeeRole = (data) => {
+    connection.query("INSERT INTO employee_role SET ?", {
+        title: data.title,
+        salary: data.salary,
+        dept_id: data.id
+    }, (err, res) => {
+        if (err) throw err;
+    });
+    employeeTracker();
+}
+
 const addEmployee = () => {
     inquirer
         .prompt([{
@@ -140,7 +207,7 @@ const addEmployee = () => {
                 choices: displayEmployees,
             }
         ]).then((response) => {
-            // console.log(response)
+            console.log(response)
             addEmployees(response)
         })
 }
@@ -155,70 +222,6 @@ const addEmployees = (data) => {
     }, (error, res) => {
         if (error) throw error;
     })
-    exitOrMenu();
-}
-
-const addDept = () => {
-    inquirer
-        .prompt([{
-            type: "input",
-            message: "What is the name of the new department?",
-            name: "name"
-        }])
-        .then((response) => {
-            console.log(response.name);
-            addDepartment(response.name);
-        })
-}
-
-const addDepartment = (data) => {
-    connection.query("INSERT INTO department SET ?", {
-            dept_name: data
-        },
-        (error, res) => {
-            // console.log(error, res);
-            if (error) throw error;
-        });
-    employeeTracker();
-}
-
-
-const addRole = () => {
-    inquirer
-        .prompt([{
-                type: "input",
-                message: "What is the name of the new employee role?",
-                name: "title"
-            },
-            {
-                type: "input",
-                message: "How much is the salary of the new role?",
-                name: "salary"
-            },
-            {
-                type: "list",
-                message: "In which department is the new role?",
-                name: "id",
-                choices: displayDepartments
-            }
-        ])
-        .then((response) => {
-            console.log(response);
-            addEmployeeRole(response);
-        })
-
-
-}
-
-const addEmployeeRole = (data) => {
-    connection.query("INSERT INTO role SET ?", {
-        title: data.title,
-        salary: data.salary,
-        dept_id: data.id
-    }, (error, res) => {
-        // console.log(error, res);
-        if (error) throw error;
-    });
     employeeTracker();
 }
 
@@ -227,7 +230,7 @@ const updateRole = () => {
         .prompt([{
                 type: "list",
                 message: "Which employee role would you like to update?  ",
-                name: "empID",
+                name: "employeeID",
                 choices: displayEmployees
             },
             {
@@ -237,16 +240,14 @@ const updateRole = () => {
                 choices: displayRoles
             }
         ])
-        .then(function (response) {
-            // console.log(response);
+        .then((response) => {
             updateEmployeeRole(response);
         })
 }
 
 const updateEmployeeRole = (data) => {
-    connection.query(`UPDATE employee SET role_id = ${data.titleID} WHERE id = ${data.empID}`,
-        function (error, res) {
-            // console.log(error, res);
+    connection.query(`UPDATE employee SET role_id = ${data.titleID} WHERE id = ${data.employeeID}`,
+        (error, res) => {
             if (error) throw error;
         });
         employeeTracker();
@@ -254,7 +255,7 @@ const updateEmployeeRole = (data) => {
 
 
 const viewEmployees = () => {
-    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.name AS department, role.salary, CONCAT(manager.first_name, ' ', manager.last_name) AS manager FROM employee LEFT JOIN role on employee.role_id = role.id LEFT JOIN department on role.department_id = department.id LEFT JOIN employee manager on manager.id = employee.manager_id;", (error, res) => {
+    connection.query("SELECT * FROM employee" , (error, res) => {
         console.table(res);
         employeeTracker();
     })
@@ -262,26 +263,21 @@ const viewEmployees = () => {
 
 const viewDepartments = () => {
     console.log("view all departments")
-    connection.query("SELECT * from department", (error, res) => {
+    connection.query("SELECT * FROM department", (error, res) => {
         console.table(res);
         employeeTracker();
     })
 }
 
 const viewRoles = () => {
-    connection.query("SELECT * from role", (error, res) => {
+    connection.query("SELECT * FROM employee_role", (error, res) => {
         console.table(res);
         employeeTracker();
     })
 }
 
 const exit = () => {
-    console.log("Thank you for using Employee Tracker!");
+    console.log("Exiting employee tracker.");
     connection.end();
     process.exit();
 }
-
-
-
-
-employeeTracker();
